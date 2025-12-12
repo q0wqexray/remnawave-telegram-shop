@@ -13,6 +13,7 @@ import (
 	"remnawave-tg-shop-bot/internal/cryptopay"
 	"remnawave-tg-shop-bot/internal/database"
 	"remnawave-tg-shop-bot/internal/handler"
+	"remnawave-tg-shop-bot/internal/moynalog"
 	"remnawave-tg-shop-bot/internal/notification"
 	"remnawave-tg-shop-bot/internal/payment"
 	"remnawave-tg-shop-bot/internal/remnawave"
@@ -87,7 +88,14 @@ func main() {
 
 	syncService := sync.NewSyncService(remnawaveClient, customerRepository)
 
-	h := handler.NewHandler(syncService, paymentService, tm, customerRepository, purchaseRepository, cryptoPayClient, yookasaClient, referralRepository, cache)
+	// Инициализация MoyNalogService
+	moyNalogService, err := moynalog.New()
+	if err != nil {
+		slog.Error("Failed to initialize Moy Nalog service", "error", err)
+		panic(err)
+	}
+
+	h := handler.NewHandler(syncService, paymentService, tm, customerRepository, purchaseRepository, cryptoPayClient, yookasaClient, referralRepository, cache, moyNalogService)
 
 	me, err := b.GetMe(ctx)
 	if err != nil {

@@ -342,3 +342,4 @@ fabric.properties
 # Compiled binaries
 app
 /bin/
+.kilocode/

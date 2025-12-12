@@ -23,6 +23,7 @@ purchase and manage subscriptions through Telegram with multiple payment system 
 - [CryptoPay API](https://help.crypt.bot/crypto-pay-api)
 - Telegram Stars
 - Tribute
+- [Мой Налог API](https://lknpd.nalog.ru/) (через интеграцию с [go-moy-nalog](https://github.com/shoman4eg/go-moy-nalog))
 
 ## Features
 
@@ -180,6 +181,10 @@ Trial users can be assigned to different squads than regular paying users:
 - [PostgreSQL](https://www.postgresql.org/)
 - [pgx - PostgreSQL Driver](https://github.com/jackc/pgx)
 
+### Мой Налог интеграция
+
+- [go-moy-nalog](https://github.com/shoman4eg/go-moy-nalog) - Go библиотека для интеграции с API "Мой Налог"
+
 ## Setup Instructions
 
 1. Clone the repository
@@ -252,6 +257,43 @@ webhook to your server, and the bot activates the subscription for the user.
 ```bash
 docker compose down && docker compose up -d
 ```
+
+## Go-Moy-Nalog ("My Tax") Integration Setup
+
+To automatically send receipts to the tax service after successful payments, you need to configure the integration with the "My Tax" service.
+
+### How the Integration Works
+
+After a successful payment via YooKassa, the bot automatically sends a receipt to "My Tax" through the API. This complies with legal requirements for generating and transmitting electronic receipts to customers.
+
+Process:
+1. The user makes a payment via YooKassa.
+2. The payment is successfully completed.
+3. The bot generates a receipt with payment information.
+4. The receipt is sent to "My Tax" via the API.
+
+### Step-by-Step Setup Guide
+
+1. Obtain credentials for the "Taxpayer's Personal Account":
+   * Register on the [lknpd.nalog.ru](https://lknpd.nalog.ru/) website.
+   * Get the login (email or SNILS) and password for your account.
+
+2. Configure the environment variables in the `.env` file:
+   * Set the login for the "Taxpayer's Personal Account":
+   ```
+   MOY_NALOG_LOGIN=your_email@example.com
+   ```
+   * Set the password for the account:
+   ```
+   MOY_NALOG_PASSWORD=your_password
+   ```
+
+3. Restart the bot to apply the changes:
+   ```bash
+   docker compose down && docker compose up -d
+   ```
+
+After restarting, the bot will automatically send receipts to "My Tax" after each successful YooKassa payment. If an error occurs while sending the receipt, the payment will still be considered successful, and the error will be logged.
 
 ## How to change bot messages
 

@@ -13,6 +13,7 @@ import (
 
 	"remnawave-tg-shop-bot/internal/config"
 	"remnawave-tg-shop-bot/internal/database"
+	"remnawave-tg-shop-bot/internal/moynalog"
 )
 
 func (h Handler) BuyCallbackHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -231,6 +232,45 @@ func (h Handler) SuccessPaymentHandler(ctx context.Context, b *bot.Bot, update *
 	if err != nil {
 		slog.Error("Error processing purchase", "error", err)
 	}
+
+	// Отправка чека в "Мой налог" после успешной обработки платежа
+	go func() {
+		// Создаем контекст с таймаутом для операции отправки чека
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// Получаем информацию о покупке для формирования чека
+		purchase, err := h.purchaseRepository.FindById(ctx, int64(purchaseId))
+		if err != nil {
+			slog.Error("Error fetching purchase for receipt", "purchaseId", purchaseId, "error", err)
+			return
+		}
+
+		if purchase == nil {
+			slog.Error("Purchase not found for receipt", "purchaseId", purchaseId)
+			return
+		}
+
+		// Подготавливаем данные для чека
+		receiptData := moynalog.ReceiptData{
+			Amount:      purchase.Amount,
+			Description: fmt.Sprintf("Оплата подписки на %d месяцев", purchase.Month),
+			PaymentDate: time.Now(),
+			PaymentID:   purchaseId,
+		}
+
+		// Отправляем чек в "Мой налог" только для платежей через YooKassa
+		if purchase.InvoiceType == database.InvoiceTypeYookasa {
+			if err := h.moyNalogService.SendReceipt(ctx, receiptData); err != nil {
+				slog.Error("Failed to send receipt to Moy Nalog", "error", err, "purchaseId", purchaseId, "amount", purchase.Amount)
+				// Не прерываем выполнение, ошибка только логируется
+			} else {
+				slog.Info("Successfully sent receipt to Moy Nalog", "purchaseId", purchaseId, "amount", purchase.Amount)
+			}
+		} else {
+			slog.Info("Skipping receipt sending for non-YooKassa payment", "purchaseId", purchaseId, "invoiceType", purchase.InvoiceType)
+		}
+	}()
 }
 
 func parseCallbackData(data string) map[string]string {

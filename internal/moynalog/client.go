@@ -70,7 +70,7 @@ func (c *moyNalogClient) Auth(ctx context.Context) error {
 // SendReceipt отправляет чек в "Мой налог"
 func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) error {
     // STAGE 2: Create minimal valid payload according to rules
-    // - Exactly one service: name = "Услуга", amount = 1.00, quantity = 1
+    // - Exactly one service: name = "Услуга", amount = 1.0, quantity = 1
     // - paymentType = CASH
     // - client = empty non-nil object
     // - operationTime = time.Now().UTC()
@@ -128,6 +128,7 @@ func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) erro
             }
 
             // Повторяем попытку отправки чека один раз
+            log.Printf("MoyNalog income payload after re-auth - PaymentID: %d, Time: %v, Payload: %+v", data.PaymentID, time.Now().UTC(), incomeRequest)
             _, retryErr := c.client.Income.Create(ctx, incomeRequest)
             if retryErr != nil {
                 log.Printf("Failed to send receipt to Moy Nalog after re-auth: %v, PaymentID: %d, Amount: %.2f",

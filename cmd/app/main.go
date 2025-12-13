@@ -79,6 +79,9 @@ func main() {
 		panic(err)
 	}
 
+	// Вызов Auth() сразу после создания клиента
+	_ = moyNalogService.Auth(context.Background())
+
 	paymentService := payment.NewPaymentService(tm, purchaseRepository, remnawaveClient, customerRepository, b, cryptoPayClient, yookasaClient, referralRepository, cache, moyNalogService)
 
 	cronScheduler := setupInvoiceChecker(purchaseRepository, cryptoPayClient, paymentService, yookasaClient)

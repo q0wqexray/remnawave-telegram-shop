@@ -25,10 +25,10 @@ func New() (*moyNalogClient, error) {
     }
 
     // Создаем клиент без токена
-    client := moynalog.NewClient(nil)
+    rawClient := moynalog.NewClient(nil)
 
     // Авторизуемся и получаем токен
-    token, err := client.Auth.CreateAccessToken(context.Background(), login, password)
+    token, err := rawClient.Auth.CreateAccessToken(context.Background(), login, password)
     if err != nil {
         return nil, fmt.Errorf("failed to create access token: %w", err)
     }
@@ -36,9 +36,34 @@ func New() (*moyNalogClient, error) {
     // Создаем новый клиент с токеном
     authenticatedClient := moynalog.NewAuthClient(token)
 
-    return &moyNalogClient{
+    result := &moyNalogClient{
         client: authenticatedClient,
-    }, nil
+    }
+
+    return result, nil
+}
+
+// Auth выполняет аутентификацию клиента
+func (c *moyNalogClient) Auth(ctx context.Context) error {
+    login := os.Getenv("MOY_NALOG_LOGIN")
+    password := os.Getenv("MOY_NALOG_PASSWORD")
+
+    if login == "" || password == "" {
+        return fmt.Errorf("MOY_NALOG_LOGIN and MOY_NALOG_PASSWORD environment variables must be set")
+    }
+
+    token, err := c.client.Auth.CreateAccessToken(ctx, login, password)
+    if err != nil {
+        log.Printf("MoyNalog: auth failed: %v", err)
+        return err
+    }
+
+    // Создаем новый аутентифицированный клиент с обновленным токеном
+    authenticatedClient := moynalog.NewAuthClient(token)
+    c.client = authenticatedClient
+
+    log.Printf("MoyNalog: auth successful")
+    return nil
 }
 
 // SendReceipt отправляет чек в "Мой налог"
@@ -99,8 +124,8 @@ func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) erro
                 return nil
             }
             
-            // Выполняем аутентификацию на существующем клиенте, обновляя токен
-            _, authErr := c.client.Auth.CreateAccessToken(ctx, login, password)
+            // Выполняем повторную аутентификацию с использованием метода Auth()
+            authErr := c.Auth(ctx)
             if authErr != nil {
                 log.Printf("Failed to re-authenticate for PaymentID: %d, Error: %v", data.PaymentID, authErr)
                 return nil

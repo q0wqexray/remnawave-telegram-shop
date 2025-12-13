@@ -70,23 +70,37 @@ func (c *moyNalogClient) Auth(ctx context.Context) error {
 // SendReceipt отправляет чек в "Мой налог"
 func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) error {
     // STAGE 2: Create minimal valid payload according to rules
-    // - Exactly one service: name = "Услуга", amount = 1.0, quantity = 1
+    // - Exactly one service: name = "Подписка на 1 месяц", amount = "1", quantity = 1
     // - paymentType = CASH
+    // - incomeType = FROM_INDIVIDUAL (must be at top level)
     // - client = empty non-nil object
     // - operationTime = time.Now().UTC()
     
+    // Need to create a custom struct to include IncomeType at the top level
+    type IncomeRequestWithIncomeType struct {
+        PaymentType                       moynalog.PaymentType          `json:"paymentType"`
+        IncomeType                        string                        `json:"incomeType"`
+        Client                            *moynalog.IncomeClient        `json:"client"`
+        RequestTime                       time.Time                     `json:"requestTime"`
+        OperationTime                     time.Time                     `json:"operationTime"`
+        Services                          []*moynalog.IncomeServiceItem `json:"services"`
+        TotalAmount                       string                        `json:"totalAmount"`
+        IgnoreMaxTotalIncomeRestriction   bool                          `json:"ignoreMaxTotalIncomeRestriction"`
+    }
+    
     serviceItem := &moynalog.IncomeServiceItem{
-        Name:     "Услуга",           // Fixed service name as per STAGE 2 requirements
-        Amount:   decimal.NewFromFloat(1.00),  // Fixed amount as per STAGE 2 requirements
-        Quantity: 1,                  // Fixed quantity as per STAGE 2 requirements
+        Name:     "Подписка на 1 месяц",           // Fixed service name as per STAGE 2 requirements
+        Amount:   decimal.NewFromFloat(1.0),       // Fixed amount as per STAGE 2 requirements
+        Quantity: 1,                               // Fixed quantity as per STAGE 2 requirements
     }
 
     // Use current UTC time as per STAGE 2 requirements
     requestTime := time.Now().UTC()
 
-    // Create minimal valid payload
-    incomeRequest := &moynalog.IncomeCreateRequest{
+    // Create minimal valid payload using custom struct to include IncomeType
+    incomeRequestWithIncomeType := &IncomeRequestWithIncomeType{
         PaymentType:   moynalog.Cash, // Fixed as per STAGE 2 requirements
+        IncomeType:    "FROM_INDIVIDUAL", // Required field at top level as per STAGE 2 requirements
         RequestTime:   requestTime,
         OperationTime: requestTime,   // Same as per STAGE 2 requirements
         Services:      []*moynalog.IncomeServiceItem{serviceItem},
@@ -95,17 +109,30 @@ func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) erro
         Client: &moynalog.IncomeClient{}, // Empty non-nil object as per STAGE 2 requirements
     }
 
-    // Log the full JSON payload as required by STAGE 2
-    payloadJSON, err := json.Marshal(incomeRequest)
+    // Marshal the custom struct to JSON to include IncomeType in the logged payload
+    payloadJSON, err := json.Marshal(incomeRequestWithIncomeType)
     if err != nil {
         log.Printf("Failed to marshal payload to JSON: %v, PaymentID: %d", err, data.PaymentID)
     } else {
         log.Printf("MoyNalog payload JSON: %s, PaymentID: %d, Timestamp: %v",
             string(payloadJSON), data.PaymentID, time.Now().UTC())
     }
+    
+    // Convert back to the original struct for the API call, without IncomeType
+    incomeRequest := &moynalog.IncomeCreateRequest{
+        PaymentType:   incomeRequestWithIncomeType.PaymentType,
+        RequestTime:   incomeRequestWithIncomeType.RequestTime,
+        OperationTime: incomeRequestWithIncomeType.OperationTime,
+        Services:      incomeRequestWithIncomeType.Services,
+        TotalAmount:   incomeRequestWithIncomeType.TotalAmount,
+        IgnoreMaxTotalIncomeRestriction: incomeRequestWithIncomeType.IgnoreMaxTotalIncomeRestriction,
+        Client: incomeRequestWithIncomeType.Client,
+    }
 
-    // Отправляем чек
+    // Отправляем чек (using the original struct without IncomeType)
     _, err = c.client.Income.Create(ctx, incomeRequest)
+
+    // The rest of the function remains the same, using the original incomeRequest variable
     if err != nil {
         // Проверяем, связана ли ошибка с истечением срока действия токена
         if fmt.Sprintf("%v", err) == "access token is expired" {

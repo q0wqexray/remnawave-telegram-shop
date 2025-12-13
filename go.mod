@@ -58,3 +58,5 @@ require (
 	golang.org/x/sys v0.38.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
+
+replace github.com/shoman4eg/go-moy-nalog => github.com/q0wqexray/go-moy-nalog v0.0.0-20251213141508-bd122723361c

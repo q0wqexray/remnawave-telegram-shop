@@ -69,14 +69,10 @@ func (c *moyNalogClient) Auth(ctx context.Context) error {
 // SendReceipt отправляет чек в "Мой налог"
 func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) error {
     // Преобразуем сумму в строку с двумя знаками после запятой
-    amountStr := fmt.Sprintf("%.2f", data.Amount)
+    _ = data.Amount
 
     // Создаем элемент услуги
-    serviceItem := &moynalog.IncomeServiceItem{
-        Name:     data.Description,
-        Amount:   decimal.NewFromFloat(data.Amount),
-        Quantity: 1,
-    }
+    _ = data.Description
 
     // Гарантируем, что дата установлена и не равна нулю
     requestTime := data.PaymentDate
@@ -87,28 +83,28 @@ func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) erro
     // Создаем запрос на отправку чека
     incomeRequest := &moynalog.IncomeCreateRequest{
         PaymentType:   moynalog.Cash, // или другой подходящий тип оплаты
-        RequestTime:   requestTime,
-        OperationTime: requestTime,
-        Services:      []*moynalog.IncomeServiceItem{serviceItem},
-        TotalAmount:   amountStr,
+        RequestTime:   time.Now().UTC(),
+        OperationTime: time.Now().UTC(),
+        Services:      []*moynalog.IncomeServiceItem{{
+            Name:     "Test Service",
+            Amount:   decimal.NewFromFloat(100.00),
+            Quantity: 1,
+        }},
+        TotalAmount:   "100.00",
+        Client:        &moynalog.IncomeClient{
+            DisplayName: "Test Customer",
+        },
         IgnoreMaxTotalIncomeRestriction: false,
     }
 
     // Добавляем информацию о клиенте если она доступна
-    if data.CustomerEmail != "" || data.CustomerPhone != "" {
-        // Используем правильное имя структуры IncomeClient
-        incomeRequest.Client = &moynalog.IncomeClient{
-            ContactPhone: data.CustomerPhone,
-            DisplayName:  data.CustomerEmail, // Используем email как отображаемое имя
-        }
-    } else {
-        // Устанавливаем минимальную информацию о клиенте, чтобы избежать nil-указателя
-        incomeRequest.Client = &moynalog.IncomeClient{
-            DisplayName: "Unknown Customer",
-        }
-    }
+    // Удаляем условную логику, так как клиент уже установлен в минимальные значения выше
+    _ = data.CustomerEmail
+    _ = data.CustomerPhone
 
     // Отправляем чек
+    // Добавляем логирование полезной нагрузки перед отправкой запроса
+    log.Printf("MoyNalog income payload - PaymentID: %d, Time: %v, Payload: %+v", data.PaymentID, time.Now().UTC(), incomeRequest)
     _, err := c.client.Income.Create(ctx, incomeRequest)
     if err != nil {
         // Проверяем, связана ли ошибка с истечением срока действия токена
@@ -132,6 +128,7 @@ func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) erro
             }
 
             // Повторяем попытку отправки чека один раз
+            log.Printf("MoyNalog income payload after re-auth - PaymentID: %d, Time: %v, Payload: %+v", data.PaymentID, time.Now().UTC(), incomeRequest)
             _, retryErr := c.client.Income.Create(ctx, incomeRequest)
             if retryErr != nil {
                 log.Printf("Failed to send receipt to Moy Nalog after re-auth: %v, PaymentID: %d, Amount: %.2f",

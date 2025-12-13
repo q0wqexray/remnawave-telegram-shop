@@ -90,7 +90,7 @@ func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) erro
         if fmt.Sprintf("%v", err) == "access token is expired" {
             log.Printf("Access token expired for PaymentID: %d, attempting to re-authenticate", data.PaymentID)
             
-            // Повторная аутентификация
+            // Повторная аутентификация через существующий клиент
             login := os.Getenv("MOY_NALOG_LOGIN")
             password := os.Getenv("MOY_NALOG_PASSWORD")
             
@@ -99,19 +99,13 @@ func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) erro
                 return nil
             }
             
-            // Создаем новый клиент без токена
-            tempClient := moynalog.NewClient(nil)
-            
-            // Авторизуемся и получаем новый токен
-            newToken, authErr := tempClient.Auth.CreateAccessToken(ctx, login, password)
+            // Выполняем аутентификацию на существующем клиенте, обновляя токен
+            _, authErr := c.client.Auth.CreateAccessToken(ctx, login, password)
             if authErr != nil {
                 log.Printf("Failed to re-authenticate for PaymentID: %d, Error: %v", data.PaymentID, authErr)
                 return nil
             }
-            
-            // Обновляем клиент с новым токеном
-            c.client = moynalog.NewAuthClient(newToken)
-            
+
             // Повторяем попытку отправки чека один раз
             _, retryErr := c.client.Income.Create(ctx, incomeRequest)
             if retryErr != nil {

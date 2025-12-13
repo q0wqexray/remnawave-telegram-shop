@@ -9,6 +9,7 @@ import (
 	"remnawave-tg-shop-bot/internal/config"
 	"remnawave-tg-shop-bot/internal/cryptopay"
 	"remnawave-tg-shop-bot/internal/database"
+	"remnawave-tg-shop-bot/internal/moynalog"
 	"remnawave-tg-shop-bot/internal/remnawave"
 	"remnawave-tg-shop-bot/internal/translation"
 	"remnawave-tg-shop-bot/internal/yookasa"
@@ -29,6 +30,7 @@ type PaymentService struct {
 	yookasaClient      *yookasa.Client
 	referralRepository *database.ReferralRepository
 	cache              *cache.Cache
+	moynalogService    moynalog.MoyNalogService
 }
 
 func NewPaymentService(
@@ -41,6 +43,7 @@ func NewPaymentService(
 	yookasaClient *yookasa.Client,
 	referralRepository *database.ReferralRepository,
 	cache *cache.Cache,
+	moynalogService moynalog.MoyNalogService,
 ) *PaymentService {
 	return &PaymentService{
 		purchaseRepository: purchaseRepository,
@@ -52,6 +55,7 @@ func NewPaymentService(
 		yookasaClient:      yookasaClient,
 		referralRepository: referralRepository,
 		cache:              cache,
+		moynalogService:    moynalogService,
 	}
 }
 
@@ -61,12 +65,12 @@ func (s PaymentService) ProcessPurchaseById(ctx context.Context, purchaseId int6
 		return err
 	}
 	if purchase == nil {
-		return fmt.Errorf("purchase with crypto invoice id %s not found", utils.MaskHalfInt64(purchaseId))
+	return fmt.Errorf("purchase with crypto invoice id %s not found", utils.MaskHalfInt64(purchaseId))
 	}
 
 	customer, err := s.customerRepository.FindById(ctx, purchase.CustomerID)
 	if err != nil {
-		return err
+	return err
 	}
 	if customer == nil {
 		return fmt.Errorf("customer %s not found", utils.MaskHalfInt64(purchase.CustomerID))
@@ -84,7 +88,7 @@ func (s PaymentService) ProcessPurchaseById(ctx context.Context, purchaseId int6
 
 	user, err := s.remnawaveClient.CreateOrUpdateUser(ctx, customer.ID, customer.TelegramID, config.TrafficLimit(), purchase.Month*config.DaysInMonth(), false)
 	if err != nil {
-		return err
+	return err
 	}
 
 	err = s.purchaseRepository.MarkAsPaid(ctx, purchase.ID)
@@ -93,7 +97,7 @@ func (s PaymentService) ProcessPurchaseById(ctx context.Context, purchaseId int6
 	}
 
 	customerFilesToUpdate := map[string]interface{}{
-		"subscription_link": user.SubscriptionUrl,
+	"subscription_link": user.SubscriptionUrl,
 		"expire_at":         user.ExpireAt,
 	}
 
@@ -113,6 +117,24 @@ func (s PaymentService) ProcessPurchaseById(ctx context.Context, purchaseId int6
 		return err
 	}
 
+	// Отправляем чек в "Мой налог" только для платежей через YooKassa
+	if purchase.InvoiceType == database.InvoiceTypeYookasa {
+		// Подготавливаем данные для чека
+		receiptData := moynalog.ReceiptData{
+			Amount:        purchase.Amount,
+			Description:   fmt.Sprintf("Оплата подписки на %d месяцев", purchase.Month),
+			PaymentDate:   time.Now(),
+			PaymentID:     int(purchaseId),
+			CustomerEmail: "", // В текущей структуре Customer нет поля для email
+			CustomerPhone: "", // В текущей структуре Customer нет поля для телефона
+		}
+
+		// Отправляем чек
+		if err := s.moynalogService.SendReceipt(ctx, receiptData); err != nil {
+			slog.Error("Failed to send receipt to Moy Nalog", "error", err, "purchaseId", purchaseId)
+		}
+	}
+
 	ctxReferee := context.Background()
 	referee, err := s.referralRepository.FindByReferee(ctxReferee, customer.TelegramID)
 	if referee == nil {
@@ -122,7 +144,7 @@ func (s PaymentService) ProcessPurchaseById(ctx context.Context, purchaseId int6
 		return nil
 	}
 	if err != nil {
-		return err
+	return err
 	}
 	refereeCustomer, err := s.customerRepository.FindByTelegramId(ctxReferee, referee.ReferrerID)
 	if err != nil {

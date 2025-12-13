@@ -72,7 +72,14 @@ func main() {
 		panic(err)
 	}
 
-	paymentService := payment.NewPaymentService(tm, purchaseRepository, remnawaveClient, customerRepository, b, cryptoPayClient, yookasaClient, referralRepository, cache)
+	// Инициализация MoyNalogService
+	moyNalogService, err := moynalog.New()
+	if err != nil {
+		slog.Error("Failed to initialize Moy Nalog service", "error", err)
+		panic(err)
+	}
+
+	paymentService := payment.NewPaymentService(tm, purchaseRepository, remnawaveClient, customerRepository, b, cryptoPayClient, yookasaClient, referralRepository, cache, moyNalogService)
 
 	cronScheduler := setupInvoiceChecker(purchaseRepository, cryptoPayClient, paymentService, yookasaClient)
 	if cronScheduler != nil {
@@ -87,13 +94,6 @@ func main() {
 	defer subscriptionNotificationCronScheduler.Stop()
 
 	syncService := sync.NewSyncService(remnawaveClient, customerRepository)
-
-	// Инициализация MoyNalogService
-	moyNalogService, err := moynalog.New()
-	if err != nil {
-		slog.Error("Failed to initialize Moy Nalog service", "error", err)
-		panic(err)
-	}
 
 	h := handler.NewHandler(syncService, paymentService, tm, customerRepository, purchaseRepository, cryptoPayClient, yookasaClient, referralRepository, cache, moyNalogService)
 

@@ -1,7 +1,7 @@
 services:
   bot:
-    image: remnawave-telegram-shop-bot:latest
-    container_name: 'remnawave-telegram-shop-bot'
+    build: .
+    container_name: 'remnawave-telegram-shop-bot-dev'
     hostname: bot
     env_file:
       - .env
@@ -10,13 +10,14 @@ services:
         condition: service_healthy
     volumes:
       - ./translations:/translations
+      - /var/lib/dbus/machine-id:/etc/machine-id
     networks:
       - remnawave-network
 
   db:
     image: postgres:17
-    container_name: 'remnawave-telegram-shop-db'
-    hostname: remnawave-telegram-shop-db
+    container_name: 'remnawave-telegram-shop-db-dev'
+    hostname: remnawave-telegram-shop-db-dev
     restart: unless-stopped
     env_file:
       - .env
@@ -28,7 +29,7 @@ services:
     ports:
       - '127.0.0.1:5432:5432'
     volumes:
-      - remnawave-telegram-shop-db-data:/var/lib/postgresql/data
+      - remnawave-telegram-shop-db-dev-data:/var/lib/postgresql/data
     healthcheck:
       test: [ 'CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}' ]
       interval: 3s
@@ -48,10 +49,10 @@ services:
 #      - 4040:4040
 
 volumes:
-  remnawave-telegram-shop-db-data:
+  remnawave-telegram-shop-db-dev-data:
     driver: local
     external: false
-    name: remnawave-telegram-shop-db-data
+    name: remnawave-telegram-shop-db-dev-data
 
 networks:
   remnawave-network:

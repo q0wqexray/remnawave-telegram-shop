@@ -70,30 +70,31 @@ func (c *moyNalogClient) Auth(ctx context.Context) error {
 // SendReceipt отправляет чек в "Мой налог"
 func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) error {
     // STAGE 2: Create minimal valid payload according to rules
-    // - Exactly one service: name = "Услуга", amount = 1.0, quantity = 1
-    // - paymentType = CASH
-    // - client = empty non-nil object
-    // - operationTime = time.Now().UTC()
+        // - Exactly one service: name = "Услуга", amount = 1.0, quantity = 1
+        // - paymentType = CASH
+        // - client = empty non-nil object
+        // - operationTime = time.Now().UTC()
+        // - requestTime = time.Now().UTC()
+        // - totalAmount = 1.00
+        
+        serviceItem := &moynalog.IncomeServiceItem{
+            Name:     "Услуга",           // Fixed service name as per STAGE 2 requirements
+            Amount:   decimal.NewFromFloat(1.00),  // Fixed amount as per STAGE 2 requirements
+            Quantity: 1,                  // Fixed quantity as per STAGE 2 requirements
+        }
     
-    serviceItem := &moynalog.IncomeServiceItem{
-        Name:     "Услуга",           // Fixed service name as per STAGE 2 requirements
-        Amount:   decimal.NewFromFloat(1.00),  // Fixed amount as per STAGE 2 requirements
-        Quantity: 1,                  // Fixed quantity as per STAGE 2 requirements
-    }
-
-    // Use current UTC time as per STAGE 2 requirements
-    requestTime := time.Now().UTC()
-
-    // Create minimal valid payload
-    incomeRequest := &moynalog.IncomeCreateRequest{
-        PaymentType:   moynalog.Cash, // Fixed as per STAGE 2 requirements
-        RequestTime:   requestTime,
-        OperationTime: requestTime,   // Same as per STAGE 2 requirements
-        Services:      []*moynalog.IncomeServiceItem{serviceItem},
-        TotalAmount:   "1.00",        // Match the fixed amount
-        IgnoreMaxTotalIncomeRestriction: false,
-        Client: &moynalog.IncomeClient{}, // Empty non-nil object as per STAGE 2 requirements
-    }
+        // Use current UTC time as per STAGE 2 requirements
+        requestTime := time.Now().UTC()
+    
+        // Create minimal valid payload
+        incomeRequest := &moynalog.IncomeCreateRequest{
+            PaymentType:   moynalog.Cash, // Fixed as per STAGE 2 requirements
+            RequestTime:   requestTime,
+            OperationTime: requestTime,   // Same as per STAGE 2 requirements
+            Services:      []*moynalog.IncomeServiceItem{serviceItem},
+            TotalAmount:   "1.00",        // Match the fixed amount as string
+            Client: &moynalog.IncomeClient{}, // Empty non-nil object as per STAGE 2 requirements
+        }
 
     // Log the full JSON payload as required by STAGE 2
     payloadJSON, err := json.Marshal(incomeRequest)

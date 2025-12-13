@@ -2,6 +2,7 @@ package moynalog
 
 import (
     "context"
+    "encoding/json"
     "fmt"
     "os"
     "log"
@@ -68,48 +69,43 @@ func (c *moyNalogClient) Auth(ctx context.Context) error {
 
 // SendReceipt отправляет чек в "Мой налог"
 func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) error {
-    // Преобразуем сумму в строку с двумя знаками после запятой
-    amountStr := fmt.Sprintf("%.2f", data.Amount)
-
-    // Создаем элемент услуги
+    // STAGE 2: Create minimal valid payload according to rules
+    // - Exactly one service: name = "Услуга", amount = 1.00, quantity = 1
+    // - paymentType = CASH
+    // - client = empty non-nil object
+    // - operationTime = time.Now().UTC()
+    
     serviceItem := &moynalog.IncomeServiceItem{
-        Name:     data.Description,
-        Amount:   decimal.NewFromFloat(data.Amount),
-        Quantity: 1,
+        Name:     "Услуга",           // Fixed service name as per STAGE 2 requirements
+        Amount:   decimal.NewFromFloat(1.00),  // Fixed amount as per STAGE 2 requirements
+        Quantity: 1,                  // Fixed quantity as per STAGE 2 requirements
     }
 
-    // Гарантируем, что дата установлена и не равна нулю
-    requestTime := data.PaymentDate
-    if requestTime.IsZero() {
-        requestTime = time.Now().UTC()
-    }
+    // Use current UTC time as per STAGE 2 requirements
+    requestTime := time.Now().UTC()
 
-    // Создаем запрос на отправку чека
+    // Create minimal valid payload
     incomeRequest := &moynalog.IncomeCreateRequest{
-        PaymentType:   moynalog.Cash, // или другой подходящий тип оплаты
+        PaymentType:   moynalog.Cash, // Fixed as per STAGE 2 requirements
         RequestTime:   requestTime,
-        OperationTime: requestTime,
+        OperationTime: requestTime,   // Same as per STAGE 2 requirements
         Services:      []*moynalog.IncomeServiceItem{serviceItem},
-        TotalAmount:   amountStr,
+        TotalAmount:   "1.00",        // Match the fixed amount
         IgnoreMaxTotalIncomeRestriction: false,
+        Client: &moynalog.IncomeClient{}, // Empty non-nil object as per STAGE 2 requirements
     }
 
-    // Добавляем информацию о клиенте если она доступна
-    if data.CustomerEmail != "" || data.CustomerPhone != "" {
-        // Используем правильное имя структуры IncomeClient
-        incomeRequest.Client = &moynalog.IncomeClient{
-            ContactPhone: data.CustomerPhone,
-            DisplayName:  data.CustomerEmail, // Используем email как отображаемое имя
-        }
+    // Log the full JSON payload as required by STAGE 2
+    payloadJSON, err := json.Marshal(incomeRequest)
+    if err != nil {
+        log.Printf("Failed to marshal payload to JSON: %v, PaymentID: %d", err, data.PaymentID)
     } else {
-        // Устанавливаем минимальную информацию о клиенте, чтобы избежать nil-указателя
-        incomeRequest.Client = &moynalog.IncomeClient{
-            DisplayName: "Unknown Customer",
-        }
+        log.Printf("MoyNalog payload JSON: %s, PaymentID: %d, Timestamp: %v",
+            string(payloadJSON), data.PaymentID, time.Now().UTC())
     }
 
     // Отправляем чек
-    _, err := c.client.Income.Create(ctx, incomeRequest)
+    _, err = c.client.Income.Create(ctx, incomeRequest)
     if err != nil {
         // Проверяем, связана ли ошибка с истечением срока действия токена
         if fmt.Sprintf("%v", err) == "access token is expired" {

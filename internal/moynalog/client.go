@@ -86,6 +86,45 @@ func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) erro
     // Отправляем чек
     _, err := c.client.Income.Create(ctx, incomeRequest)
     if err != nil {
+        // Проверяем, связана ли ошибка с истечением срока действия токена
+        if fmt.Sprintf("%v", err) == "access token is expired" {
+            log.Printf("Access token expired for PaymentID: %d, attempting to re-authenticate", data.PaymentID)
+            
+            // Повторная аутентификация
+            login := os.Getenv("MOY_NALOG_LOGIN")
+            password := os.Getenv("MOY_NALOG_PASSWORD")
+            
+            if login == "" || password == "" {
+                log.Printf("MOY_NALOG_LOGIN and/or MOY_NALOG_PASSWORD environment variables are not set: PaymentID: %d", data.PaymentID)
+                return nil
+            }
+            
+            // Создаем новый клиент без токена
+            tempClient := moynalog.NewClient(nil)
+            
+            // Авторизуемся и получаем новый токен
+            newToken, authErr := tempClient.Auth.CreateAccessToken(ctx, login, password)
+            if authErr != nil {
+                log.Printf("Failed to re-authenticate for PaymentID: %d, Error: %v", data.PaymentID, authErr)
+                return nil
+            }
+            
+            // Обновляем клиент с новым токеном
+            c.client = moynalog.NewAuthClient(newToken)
+            
+            // Повторяем попытку отправки чека один раз
+            _, retryErr := c.client.Income.Create(ctx, incomeRequest)
+            if retryErr != nil {
+                log.Printf("Failed to send receipt to Moy Nalog after re-auth: %v, PaymentID: %d, Amount: %.2f",
+                    retryErr, data.PaymentID, data.Amount)
+                return nil
+            }
+            
+            log.Printf("Successfully sent receipt to Moy Nalog after re-auth: PaymentID: %d, Amount: %.2f",
+                data.PaymentID, data.Amount)
+            return nil
+        }
+        
         log.Printf("Failed to send receipt to Moy Nalog: %v, PaymentID: %d, Amount: %.2f",
             err, data.PaymentID, data.Amount)
         // Ошибка логируется, но не вызывает панику и не прерывает основной процесс

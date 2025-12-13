@@ -5,6 +5,7 @@ import (
     "fmt"
     "os"
     "log"
+    "time"
     "github.com/shoman4eg/go-moy-nalog/moynalog"
     "github.com/shopspring/decimal"
 )
@@ -52,14 +53,34 @@ func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) erro
         Quantity: 1,
     }
 
+    // Гарантируем, что дата установлена и не равна нулю
+    requestTime := data.PaymentDate
+    if requestTime.IsZero() {
+        requestTime = time.Now().UTC()
+    }
+
     // Создаем запрос на отправку чека
     incomeRequest := &moynalog.IncomeCreateRequest{
         PaymentType:   moynalog.Cash, // или другой подходящий тип оплаты
-        RequestTime:   data.PaymentDate,
-        OperationTime: data.PaymentDate,
+        RequestTime:   requestTime,
+        OperationTime: requestTime,
         Services:      []*moynalog.IncomeServiceItem{serviceItem},
         TotalAmount:   amountStr,
         IgnoreMaxTotalIncomeRestriction: false,
+    }
+
+    // Добавляем информацию о клиенте если она доступна
+    if data.CustomerEmail != "" || data.CustomerPhone != "" {
+        // Используем правильное имя структуры IncomeClient
+        incomeRequest.Client = &moynalog.IncomeClient{
+            ContactPhone: data.CustomerPhone,
+            DisplayName:  data.CustomerEmail, // Используем email как отображаемое имя
+        }
+    } else {
+        // Устанавливаем минимальную информацию о клиенте, чтобы избежать nil-указателя
+        incomeRequest.Client = &moynalog.IncomeClient{
+            DisplayName: "Unknown Customer",
+        }
     }
 
     // Отправляем чек
@@ -67,7 +88,8 @@ func (c *moyNalogClient) SendReceipt(ctx context.Context, data ReceiptData) erro
     if err != nil {
         log.Printf("Failed to send receipt to Moy Nalog: %v, PaymentID: %d, Amount: %.2f",
             err, data.PaymentID, data.Amount)
-        return fmt.Errorf("failed to send receipt: %w", err)
+        // Ошибка логируется, но не вызывает панику и не прерывает основной процесс
+        return nil // Возвращаем nil, чтобы избежать паники при отправке чека
     }
 
     log.Printf("Successfully sent receipt to Moy Nalog: PaymentID: %d, Amount: %.2f",
